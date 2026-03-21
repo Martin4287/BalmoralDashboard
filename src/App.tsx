@@ -657,9 +657,10 @@ export default function App() {
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Pax</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Efectivo</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Tarjeta</th>
-                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">QR / Otros</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">QR</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Cargo Habitación</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Total</th>
-                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Ticket Prom.</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Ticket Promedio</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -677,7 +678,8 @@ export default function App() {
                             <td className="px-6 py-4 text-sm text-slate-600 font-medium">{row.cantidad}</td>
                             <td className="px-6 py-4 text-sm text-slate-600 font-medium">${row.efectivo.toLocaleString()}</td>
                             <td className="px-6 py-4 text-sm text-slate-600 font-medium">${row.tarjeta.toLocaleString()}</td>
-                            <td className="px-6 py-4 text-sm text-slate-600 font-medium">${(row.qr + row.cargoHabitacion).toLocaleString()}</td>
+                            <td className="px-6 py-4 text-sm text-slate-600 font-medium">${row.qr.toLocaleString()}</td>
+                            <td className="px-6 py-4 text-sm text-slate-600 font-medium">${row.cargoHabitacion.toLocaleString()}</td>
                             <td className="px-6 py-4">
                               <span className="text-sm font-bold text-slate-900">${row.total.toLocaleString()}</span>
                             </td>
@@ -691,7 +693,7 @@ export default function App() {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan={7} className="px-6 py-12 text-center text-slate-400 font-medium">
+                          <td colSpan={8} className="px-6 py-12 text-center text-slate-400 font-medium">
                             No hay datos registrados para el día de ayer.
                           </td>
                         </tr>
