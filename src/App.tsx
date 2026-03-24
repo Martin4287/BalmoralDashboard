@@ -56,6 +56,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { fetchData, DailyStats } from './services/dataService';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import OccupancyForm from './components/OccupancyForm';
 
 function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -64,6 +65,17 @@ function cn(...inputs: ClassValue[]) {
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
 type ViewType = 'dashboard' | 'calendar' | 'billing';
+
+const parseDate = (dateStr: string) => {
+  const formats = ['dd/MM/yyyy', 'MM/dd/yyyy', 'yyyy-MM-dd', 'd/M/yyyy', 'M/d/yyyy'];
+  for (const f of formats) {
+    try {
+      const d = parse(dateStr, f, new Date());
+      if (isValid(d)) return d;
+    } catch { /* continue */ }
+  }
+  return null;
+};
 
 export default function App() {
   const [data, setData] = useState<DailyStats[]>([]);
@@ -97,17 +109,6 @@ export default function App() {
   }, [loadData]);
 
   const filteredData = useMemo(() => {
-    const parseDate = (dateStr: string) => {
-      const formats = ['dd/MM/yyyy', 'MM/dd/yyyy', 'yyyy-MM-dd', 'd/M/yyyy', 'M/d/yyyy'];
-      for (const f of formats) {
-        try {
-          const d = parse(dateStr, f, new Date());
-          if (isValid(d)) return d;
-        } catch { /* continue */ }
-      }
-      return null;
-    };
-
     return data.filter(item => {
       const matchesType = selectedType === 'TODOS' || item.tipo === selectedType;
       
@@ -129,6 +130,24 @@ export default function App() {
     });
   }, [data, selectedType, startDate, endDate]);
 
+  const dateFilteredData = useMemo(() => {
+    return data.filter(item => {
+      let matchesDate = true;
+      const itemDate = parseDate(item.fecha);
+      if (itemDate) {
+        if (startDate) {
+          const start = parse(startDate, 'yyyy-MM-dd', new Date());
+          if (isValid(start) && itemDate < start) matchesDate = false;
+        }
+        if (endDate) {
+          const end = parse(endDate, 'yyyy-MM-dd', new Date());
+          if (isValid(end) && itemDate > end) matchesDate = false;
+        }
+      }
+      return matchesDate;
+    });
+  }, [data, startDate, endDate]);
+
   const stats = useMemo(() => {
     const totalQty = filteredData.reduce((acc, curr) => acc + curr.cantidad, 0);
     const totalBilled = filteredData.reduce((acc, curr) => acc + curr.total, 0);
@@ -141,8 +160,17 @@ export default function App() {
       cargoHabitacion: filteredData.reduce((acc, curr) => acc + curr.cargoHabitacion, 0),
     };
 
-    return { totalQty, totalBilled, avgTicket, byPayment };
-  }, [filteredData]);
+    const uniqueDates = Array.from(new Set(dateFilteredData.map(d => d.fecha)));
+    const totalOccupancy = uniqueDates.reduce<number>((acc, date) => {
+      const dayData = dateFilteredData.filter(d => d.fecha === date);
+      const maxDayOccupancy = Math.max(...dayData.map(d => d.ocupacion), 0);
+      return acc + maxDayOccupancy;
+    }, 0);
+
+    const conversionRate = totalOccupancy > 0 ? (totalQty / totalOccupancy) * 100 : 0;
+
+    return { totalQty, totalBilled, avgTicket, byPayment, totalOccupancy, conversionRate };
+  }, [filteredData, dateFilteredData]);
 
   const monthlyComparison = useMemo(() => {
     if (data.length === 0) return { percent: 0, trendUp: true, currentCovers: 0 };
@@ -227,7 +255,11 @@ export default function App() {
   }, [data]);
 
   const filteredYesterdayData = useMemo(() => {
-    return yesterdayData;
+    return yesterdayData.filter(row => 
+      row.tipo !== 'OCUPACIÓN' && 
+      row.tipo !== 'OCUPACION' && 
+      row.tipo !== 'OCUPACIÓN HOTEL'
+    );
   }, [yesterdayData]);
 
   const chartData = useMemo(() => {
@@ -261,6 +293,45 @@ export default function App() {
     return Object.values(groupedByDate).sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
   }, [filteredData]);
 
+  const conversionChartData = useMemo(() => {
+    const groupedByDate: Record<string, { fecha: string; almuerzoQty: number; cenaQty: number; ocupacion: number; dateObj: Date }> = {};
+    
+    dateFilteredData.forEach(item => {
+      const dateObj = parseDate(item.fecha);
+      if (dateObj) {
+        const key = format(dateObj, 'yyyy-MM-dd');
+        if (!groupedByDate[key]) {
+          groupedByDate[key] = { 
+            fecha: format(dateObj, 'dd/MM'), 
+            almuerzoQty: 0, 
+            cenaQty: 0, 
+            ocupacion: item.ocupacion || 0, 
+            dateObj 
+          };
+        }
+        
+        // Update occupancy if we found a non-zero value (in case it's only in one row)
+        if (item.ocupacion > 0 && groupedByDate[key].ocupacion === 0) {
+          groupedByDate[key].ocupacion = item.ocupacion;
+        }
+
+        if (item.tipo === 'ALMUERZO') {
+          groupedByDate[key].almuerzoQty += item.cantidad;
+        } else if (item.tipo === 'CENA') {
+          groupedByDate[key].cenaQty += item.cantidad;
+        }
+      }
+    });
+
+    return Object.values(groupedByDate)
+      .map(day => ({
+        fecha: day.fecha,
+        almuerzo: day.ocupacion > 0 ? (day.almuerzoQty / day.ocupacion) * 100 : 0,
+        cena: day.ocupacion > 0 ? (day.cenaQty / day.ocupacion) * 100 : 0,
+        dateObj: day.dateObj
+      }))
+      .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime());
+  }, [dateFilteredData]);
   const paymentChartData = [
     { name: 'Efectivo', value: stats.byPayment.efectivo },
     { name: 'Tarjeta', value: stats.byPayment.tarjeta },
@@ -410,6 +481,10 @@ export default function App() {
                   <RefreshCw size={16} className="rotate-180" />
                 </motion.button>
               </div>
+
+              <div className="pt-6 mt-6 border-t border-slate-200">
+                <OccupancyForm onSuccess={loadData} />
+              </div>
             </div>
           </motion.div>
         </div>
@@ -465,7 +540,7 @@ export default function App() {
               transition={{ duration: 0.2 }}
             >
               {/* KPI Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
                 <KpiCard 
                   title="Total Reservas" 
                   value={stats.totalQty.toLocaleString()} 
@@ -491,12 +566,20 @@ export default function App() {
                   color="amber"
                 />
                 <KpiCard 
-                  title="Crecimiento Cubiertos" 
-                  value={monthlyComparison.currentCovers.toLocaleString()} 
-                  icon={<Utensils className="text-violet-600" />} 
-                  trend={`${monthlyComparison.trendUp ? '+' : '-'}${monthlyComparison.percent}%`} 
-                  trendUp={monthlyComparison.trendUp}
+                  title="Ocupación Hotel" 
+                  value={stats.totalOccupancy.toLocaleString()} 
+                  icon={<LayoutDashboard className="text-violet-600" />} 
+                  trend="Pax Hotel" 
+                  trendUp={true}
                   color="violet"
+                />
+                <KpiCard 
+                  title="Tasa Conversión" 
+                  value={`${stats.conversionRate.toFixed(1)}%`} 
+                  icon={<TrendingUp className="text-rose-600" />} 
+                  trend="Pax / Hotel" 
+                  trendUp={stats.conversionRate > 20}
+                  color="rose"
                 />
               </div>
 
@@ -630,6 +713,82 @@ export default function App() {
                 </motion.div>
               </div>
 
+              {/* Conversion Analysis Section */}
+              <div className="grid grid-cols-1 gap-8 mb-8">
+                <motion.div 
+                  whileHover={{ y: -4 }}
+                  className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300"
+                >
+                  <div className="flex items-center justify-between mb-6">
+                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                      <TrendingUp size={18} className="text-rose-600" />
+                      Tasa de Conversión Diaria (%)
+                    </h3>
+                    <div className="flex gap-4">
+                      <span className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                        <div className="w-2.5 h-2.5 rounded-full bg-rose-400" /> Almuerzos
+                      </span>
+                      <span className="flex items-center gap-1.5 text-xs font-medium text-slate-500">
+                        <div className="w-2.5 h-2.5 rounded-full bg-rose-600" /> Cenas
+                      </span>
+                    </div>
+                  </div>
+                  <div className="h-80 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={conversionChartData}>
+                        <defs>
+                          <linearGradient id="colorAlmConv" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#fb7185" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#fb7185" stopOpacity={0}/>
+                          </linearGradient>
+                          <linearGradient id="colorCenConv" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#e11d48" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#e11d48" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" strokeOpacity={0.6} />
+                        <XAxis 
+                          dataKey="fecha" 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{fill: '#64748b', fontSize: 11}}
+                          dy={10}
+                        />
+                        <YAxis 
+                          axisLine={false} 
+                          tickLine={false} 
+                          tick={{fill: '#64748b', fontSize: 11}}
+                          unit="%"
+                        />
+                        <Tooltip 
+                          contentStyle={{borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'}}
+                          formatter={(value: number) => [`${value.toFixed(1)}%`, 'Conversión']}
+                        />
+                        <Legend verticalAlign="top" height={36} iconType="circle" />
+                        <Area 
+                          name="Almuerzo"
+                          type="monotone" 
+                          dataKey="almuerzo" 
+                          stroke="#fb7185" 
+                          strokeWidth={3}
+                          fillOpacity={1} 
+                          fill="url(#colorAlmConv)" 
+                        />
+                        <Area 
+                          name="Cena"
+                          type="monotone" 
+                          dataKey="cena" 
+                          stroke="#e11d48" 
+                          strokeWidth={3}
+                          fillOpacity={1} 
+                          fill="url(#colorCenConv)" 
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </motion.div>
+              </div>
+
               {/* Yesterday's Data Table */}
               <motion.div 
                 whileHover={{ y: -4 }}
@@ -647,25 +806,39 @@ export default function App() {
                       {yesterdayData.length > 0 ? `Datos del ${yesterdayData[0].fecha}` : 'No hay datos disponibles'}
                     </p>
                   </div>
-                </div>
-                
-                <div className="overflow-x-auto">
+                  
+                  {yesterdayData.length > 0 && (
+                    <div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
+                      <div className="text-right">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ocupación Total</p>
+                        <p className="text-xl font-black text-slate-900 leading-none">
+                          {Math.max(...yesterdayData.map(d => d.ocupacion || 0), 0)}
+                        </p>
+                      </div>
+                      <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm border border-slate-100">
+                        <Users size={20} className="text-slate-400" />
+                      </div>
+                    </div>
+                  )}
+                </div>                <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-slate-50/50">
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Tipo</th>
-                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Pax</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Cubiertos</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Efectivo</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Tarjeta</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">QR</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Cargo Habitación</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Total</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Conversión</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Ticket Promedio</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
-                      {filteredYesterdayData.length > 0 ? (
-                        filteredYesterdayData.map((row, idx) => (
+                      {filteredYesterdayData.length > 0 ? (() => {
+                        const totalDayOccupancy = Math.max(...yesterdayData.map(d => d.ocupacion || 0), 0);
+                        return filteredYesterdayData.map((row, idx) => (
                           <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-2">
@@ -684,16 +857,31 @@ export default function App() {
                               <span className="text-sm font-bold text-slate-900">${row.total.toLocaleString()}</span>
                             </td>
                             <td className="px-6 py-4">
+                              <div className="flex flex-col">
+                                <span className={cn(
+                                  "text-xs font-bold px-2 py-1 rounded-full w-fit",
+                                  totalDayOccupancy > 0 ? (row.cantidad / totalDayOccupancy > 0.2 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700") : "bg-slate-100 text-slate-500"
+                                )}>
+                                  {totalDayOccupancy > 0 ? `${((row.cantidad / totalDayOccupancy) * 100).toFixed(1)}%` : '-'}
+                                </span>
+                                {totalDayOccupancy > 0 && (
+                                  <span className="text-[10px] text-slate-400 mt-1 font-medium">
+                                    ({row.cantidad}/{totalDayOccupancy})
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-6 py-4">
                               <div className="flex items-center gap-1.5">
                                 <TrendingUp size={14} className="text-emerald-500" />
                                 <span className="text-sm font-bold text-emerald-600">${Math.round(row.ticketPromedio).toLocaleString()}</span>
                               </div>
                             </td>
                           </tr>
-                        ))
-                      ) : (
+                        ));
+                      })() : (
                         <tr>
-                          <td colSpan={8} className="px-6 py-12 text-center text-slate-400 font-medium">
+                          <td colSpan={9} className="px-6 py-12 text-center text-slate-400 font-medium">
                             No hay datos registrados para el día de ayer.
                           </td>
                         </tr>
@@ -1241,13 +1429,14 @@ function KpiCard({ title, value, icon, trend, trendUp, color }: {
   icon: React.ReactNode; 
   trend: string; 
   trendUp: boolean;
-  color: 'blue' | 'emerald' | 'amber' | 'violet';
+  color: 'blue' | 'emerald' | 'amber' | 'violet' | 'rose';
 }) {
   const colorClasses = {
     blue: "bg-blue-50 text-blue-600",
     emerald: "bg-emerald-50 text-emerald-600",
     amber: "bg-amber-50 text-amber-600",
     violet: "bg-violet-50 text-violet-600",
+    rose: "bg-rose-50 text-rose-600",
   };
 
   return (

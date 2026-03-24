@@ -24,6 +24,7 @@ export interface DailyStats {
   cargoHabitacion: number;
   total: number;
   ticketPromedio: number;
+  ocupacion: number;
 }
 
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1ejsrirpAwCVsftNfF9GQuQRu8q-TEA_kzLxoCts83Zo/export?format=csv';
@@ -149,6 +150,7 @@ export const fetchData = async (): Promise<DailyStats[]> => {
             const calculatedTotal = finalEfectivo + finalTarjeta + finalQr + finalCargoHabitacion;
             const finalTotal = total || calculatedTotal;
             const cantidad = parseInt(String(getVal(['cantidad', 'pax', 'qty', 'personas', 'comensales']) || 0)) || 0;
+            const ocupacion = parseNum(getVal(['ocupacion', 'ocupación', 'hotel_pax', 'pax_hotel', 'pax_h', 'h_pax', 'ocupacion_hotel']));
 
             if (!grouped[key]) {
               grouped[key] = {
@@ -160,7 +162,8 @@ export const fetchData = async (): Promise<DailyStats[]> => {
                 qr: 0,
                 cargoHabitacion: 0,
                 total: 0,
-                ticketPromedio: 0
+                ticketPromedio: 0,
+                ocupacion: 0
               };
             }
 
@@ -170,6 +173,10 @@ export const fetchData = async (): Promise<DailyStats[]> => {
             grouped[key].qr += finalQr;
             grouped[key].cargoHabitacion += finalCargoHabitacion;
             grouped[key].total += finalTotal;
+            // For occupancy, we take the max value if multiple rows for the same date/type have it
+            if (ocupacion > grouped[key].ocupacion) {
+              grouped[key].ocupacion = ocupacion;
+            }
           });
 
           // Calculate averages
