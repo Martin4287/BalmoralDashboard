@@ -16,6 +16,7 @@ import {
   Download,
   RefreshCw,
   Clock,
+  Camera,
   AlertCircle,
   ChevronLeft,
   ChevronRight
@@ -214,6 +215,8 @@ export default function App() {
     };
   }, [data]);
 
+  const [isScreenshotMode, setIsScreenshotMode] = useState(false);
+
   const yesterdayData = useMemo(() => {
     if (data.length === 0) return [];
     
@@ -381,7 +384,10 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col lg:flex-row font-sans text-slate-900">
       {/* Sidebar */}
-      <aside className="w-full lg:w-72 bg-white border-r border-slate-200 p-6 flex flex-col">
+      <aside className={cn(
+        "w-full lg:w-72 bg-white border-r border-slate-200 p-6 flex flex-col transition-all duration-300",
+        isScreenshotMode ? "hidden" : "flex"
+      )}>
         <div className="flex items-center gap-3 mb-10">
           <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-200">
             <TrendingUp size={24} />
@@ -491,37 +497,42 @@ export default function App() {
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 p-4 lg:p-8 overflow-y-auto">
-        <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-          <div>
-            <h2 className="text-2xl font-bold text-slate-900">
-              {currentView === 'dashboard' ? 'Resumen Ejecutivo' : 
-               currentView === 'calendar' ? 'Calendario de Reservas' : 
-               'Análisis de Facturación'}
-            </h2>
-            <div className="flex items-center gap-2 text-slate-500 text-sm mt-1">
-              <Clock size={14} />
-              <span>Última actualización: {format(lastUpdate, 'HH:mm:ss')}</span>
+      <main className={cn(
+        "flex-1 p-4 lg:p-8 overflow-y-auto transition-all duration-300",
+        isScreenshotMode ? "bg-white p-0" : "bg-slate-50"
+      )}>
+        {!isScreenshotMode && (
+          <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-900">
+                {currentView === 'dashboard' ? 'Resumen Ejecutivo' : 
+                 currentView === 'calendar' ? 'Calendario de Reservas' : 
+                 'Análisis de Facturación'}
+              </h2>
+              <div className="flex items-center gap-2 text-slate-500 text-sm mt-1">
+                <Clock size={14} />
+                <span>Última actualización: {format(lastUpdate, 'HH:mm:ss')}</span>
+              </div>
             </div>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <div className="bg-white border border-slate-200 rounded-lg px-4 py-2 flex items-center gap-3 shadow-sm">
-              <CalendarIcon size={18} className="text-blue-600" />
-              <span className="text-sm font-medium text-slate-700">
-                {format(new Date(), "EEEE, d 'de' MMMM", { locale: es })}
-              </span>
+            
+            <div className="flex items-center gap-3">
+              <div className="bg-white border border-slate-200 rounded-lg px-4 py-2 flex items-center gap-3 shadow-sm">
+                <CalendarIcon size={18} className="text-blue-600" />
+                <span className="text-sm font-medium text-slate-700">
+                  {format(new Date(), "EEEE, d 'de' MMMM", { locale: es })}
+                </span>
+              </div>
+              <motion.button 
+                whileTap={{ scale: 0.95 }}
+                onClick={downloadData}
+                title="Descargar CSV"
+                className="p-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                <Download size={20} />
+              </motion.button>
             </div>
-            <motion.button 
-              whileTap={{ scale: 0.95 }}
-              onClick={downloadData}
-              title="Descargar CSV"
-              className="p-2 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-50 transition-colors"
-            >
-              <Download size={20} />
-            </motion.button>
-          </div>
-        </header>
+          </header>
+        )}
 
         {error && (
           <div className="bg-red-50 border border-red-100 text-red-600 p-4 rounded-xl mb-8 flex items-center gap-3">
@@ -539,8 +550,10 @@ export default function App() {
               exit={{ opacity: 0, x: 20 }}
               transition={{ duration: 0.2 }}
             >
-              {/* KPI Grid */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+              {!isScreenshotMode && (
+                <>
+                  {/* KPI Grid */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
                 <KpiCard 
                   title="Total Reservas" 
                   value={stats.totalQty.toLocaleString()} 
@@ -789,38 +802,65 @@ export default function App() {
                 </motion.div>
               </div>
 
+                </>
+              )}
+
               {/* Yesterday's Data Table */}
               <motion.div 
-                whileHover={{ y: -4 }}
-                className="bg-white rounded-2xl border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden"
+                whileHover={!isScreenshotMode ? { y: -4 } : {}}
+                className={cn(
+                  "bg-white rounded-2xl border border-slate-200 shadow-sm transition-all duration-300 overflow-hidden",
+                  isScreenshotMode ? "fixed inset-0 z-[100] rounded-none border-none shadow-none flex flex-col h-screen" : "hover:shadow-xl"
+                )}
               >
                 <div className="p-6 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div>
-                    <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                      <Clock size={18} className="text-violet-600" />
-                      {yesterdayData.length > 0 && isSameDay(parse(yesterdayData[0].fecha, 'dd/MM/yyyy', new Date()), subDays(new Date(), 1)) 
-                        ? 'Detalle del Día Anterior' 
-                        : 'Detalle del Último Día con Datos'}
-                    </h3>
-                    <p className="text-slate-500 text-xs font-medium mt-1">
-                      {yesterdayData.length > 0 ? `Datos del ${yesterdayData[0].fecha}` : 'No hay datos disponibles'}
-                    </p>
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                        <Clock size={18} className="text-violet-600" />
+                        {yesterdayData.length > 0 && isSameDay(parse(yesterdayData[0].fecha, 'dd/MM/yyyy', new Date()), subDays(new Date(), 1)) 
+                          ? 'Detalle del Día Anterior' 
+                          : 'Detalle del Último Día con Datos'}
+                      </h3>
+                      <p className="text-slate-500 text-xs font-medium mt-1">
+                        {yesterdayData.length > 0 ? `Datos del ${yesterdayData[0].fecha}` : 'No hay datos disponibles'}
+                      </p>
+                    </div>
                   </div>
                   
-                  {yesterdayData.length > 0 && (
-                    <div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
-                      <div className="text-right">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ocupación Total</p>
-                        <p className="text-xl font-black text-slate-900 leading-none">
-                          {Math.max(...yesterdayData.map(d => d.ocupacion || 0), 0)}
-                        </p>
+                  <div className="flex flex-col items-end gap-3">
+                    <button 
+                      onClick={() => setIsScreenshotMode(!isScreenshotMode)}
+                      className={cn(
+                        "p-2 rounded-lg transition-all flex items-center gap-2 text-xs font-bold",
+                        isScreenshotMode 
+                          ? "bg-violet-600 text-white shadow-lg shadow-violet-200" 
+                          : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                      )}
+                    >
+                      <Camera size={16} />
+                      <span>{isScreenshotMode ? 'Salir Modo Captura' : 'Modo Captura'}</span>
+                    </button>
+
+                    {yesterdayData.length > 0 && (
+                      <div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-xl border border-slate-100">
+                        <div className="text-right">
+                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ocupación Total</p>
+                          <p className="text-xl font-black text-slate-900 leading-none">
+                            {Math.max(...yesterdayData.map(d => d.ocupacion || 0), 0)}
+                          </p>
+                        </div>
+                        <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm border border-slate-100">
+                          <Users size={20} className="text-slate-400" />
+                        </div>
                       </div>
-                      <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center shadow-sm border border-slate-100">
-                        <Users size={20} className="text-slate-400" />
-                      </div>
-                    </div>
-                  )}
-                </div>                <div className="overflow-x-auto">
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto">
+                  {/* Desktop Table View */}
+                  <div className="hidden lg:block overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
                       <tr className="bg-slate-50/50">
@@ -829,10 +869,10 @@ export default function App() {
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Efectivo</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Tarjeta</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">QR</th>
-                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Cargo Habitación</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Cargo Hab.</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Total</th>
                         <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Conversión</th>
-                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Ticket Promedio</th>
+                        <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Ticket Prom.</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100">
@@ -889,6 +929,84 @@ export default function App() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Mobile/Tablet Card View (Optimized for Screenshots) */}
+                <div className="lg:hidden p-4 space-y-4 bg-slate-50/50">
+                  {filteredYesterdayData.length > 0 ? (() => {
+                    const totalDayOccupancy = Math.max(...yesterdayData.map(d => d.ocupacion || 0), 0);
+                    return filteredYesterdayData.map((row, idx) => (
+                      <div key={idx} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                        <div className="p-4 border-b border-slate-100 bg-white flex justify-between items-center">
+                          <div className="flex items-center gap-2">
+                            {row.tipo === 'ALMUERZO' ? <Coffee size={18} className="text-amber-500" /> : 
+                             row.tipo === 'CENA' ? <Moon size={18} className="text-indigo-500" /> : 
+                             <Utensils size={18} className="text-slate-400" />}
+                            <span className="font-black text-slate-800 uppercase tracking-tight">{row.tipo}</span>
+                          </div>
+                          <div className="flex flex-col items-end">
+                            <span className={cn(
+                              "text-[10px] font-black px-2 py-0.5 rounded-full",
+                              totalDayOccupancy > 0 ? (row.cantidad / totalDayOccupancy > 0.2 ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700") : "bg-slate-100 text-slate-500"
+                            )}>
+                              {totalDayOccupancy > 0 ? `${((row.cantidad / totalDayOccupancy) * 100).toFixed(1)}% CONV.` : '-%'}
+                            </span>
+                            <span className="text-[9px] text-slate-400 font-bold mt-0.5">({row.cantidad}/{totalDayOccupancy} PAX)</span>
+                          </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 divide-x divide-slate-100">
+                          <div className="p-3 space-y-3">
+                            <div>
+                              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Cubiertos</p>
+                              <p className="text-lg font-black text-slate-900">{row.cantidad}</p>
+                            </div>
+                            <div>
+                              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Total Ventas</p>
+                              <p className="text-lg font-black text-violet-600">${row.total.toLocaleString()}</p>
+                            </div>
+                          </div>
+                          <div className="p-3 space-y-3">
+                            <div>
+                              <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Ticket Promedio</p>
+                              <div className="flex items-center gap-1">
+                                <TrendingUp size={12} className="text-emerald-500" />
+                                <p className="text-lg font-black text-emerald-600">${Math.round(row.ticketPromedio).toLocaleString()}</p>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase">Efec.</p>
+                                <p className="text-[11px] font-bold text-slate-700">${row.efectivo.toLocaleString()}</p>
+                              </div>
+                              <div>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase">Tarj.</p>
+                                <p className="text-[11px] font-bold text-slate-700">${row.tarjeta.toLocaleString()}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        
+                        <div className="px-4 py-2 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+                          <div className="flex gap-3">
+                            <div className="flex flex-col">
+                              <span className="text-[8px] font-bold text-slate-400 uppercase">QR</span>
+                              <span className="text-[10px] font-bold text-slate-600">${row.qr.toLocaleString()}</span>
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[8px] font-bold text-slate-400 uppercase">Hab.</span>
+                              <span className="text-[10px] font-bold text-slate-600">${row.cargoHabitacion.toLocaleString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ));
+                  })() : (
+                    <div className="py-12 text-center text-slate-400 font-medium bg-white rounded-xl border border-dashed border-slate-200">
+                      No hay datos registrados para el día de ayer.
+                    </div>
+                  )}
+                </div>
+              </div>
               </motion.div>
             </motion.div>
           ) : currentView === 'calendar' ? (
