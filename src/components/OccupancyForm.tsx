@@ -11,6 +11,8 @@ interface OccupancyFormProps {
 export default function OccupancyForm({ onSuccess }: OccupancyFormProps) {
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [occupancy, setOccupancy] = useState('');
+  const [customUrl, setCustomUrl] = useState(localStorage.getItem('GOOGLE_SCRIPT_URL') || '');
+  const [showUrlInput, setShowUrlInput] = useState(false);
   const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
 
@@ -24,24 +26,21 @@ export default function OccupancyForm({ onSuccess }: OccupancyFormProps) {
 
     setStatus('loading');
     
-    // Intentamos obtener la URL de varias fuentes para mayor compatibilidad
-    const scriptUrl = import.meta.env.VITE_GOOGLE_SCRIPT_URL || (window as any)._VITE_GOOGLE_SCRIPT_URL;
+    // Intentamos obtener la URL de varias fuentes
+    const scriptUrl = customUrl || import.meta.env.VITE_GOOGLE_SCRIPT_URL || (window as any)._VITE_GOOGLE_SCRIPT_URL;
 
-    console.log('[OccupancyForm] URL detectada:', scriptUrl ? 'Configurada (OK)' : 'No detectada (FALTA)');
+    console.log('[OccupancyForm] URL detectada:', scriptUrl ? 'Configurada' : 'FALTA');
 
     if (!scriptUrl || !scriptUrl.startsWith('https://script.google.com')) {
-      // Simulación si no hay URL configurada o es incorrecta
-      setTimeout(() => {
-        setStatus('success');
-        const errorType = !scriptUrl ? 'Falta variable VITE_GOOGLE_SCRIPT_URL' : 'URL mal formateada';
-        setMessage(`¡Simulado! ${errorType}. Revisa los Secrets en Settings.`);
-        setTimeout(() => {
-          setStatus('idle');
-          setOccupancy('');
-          onSuccess();
-        }, 3000);
-      }, 1000);
+      setStatus('error');
+      setMessage('Falta la URL del Script de Google. Haz clic en "Configurar URL".');
+      setShowUrlInput(true);
       return;
+    }
+
+    // Guardar la URL si es válida para que no tenga que ponerla siempre
+    if (customUrl) {
+      localStorage.setItem('GOOGLE_SCRIPT_URL', customUrl);
     }
 
     try {
@@ -104,7 +103,16 @@ export default function OccupancyForm({ onSuccess }: OccupancyFormProps) {
         </div>
 
         <div>
-          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 ml-1">Pax en Hotel</label>
+          <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 ml-1 flex justify-between items-center">
+            Pax en Hotel
+            <button 
+              type="button"
+              onClick={() => setShowUrlInput(!showUrlInput)}
+              className="text-[9px] text-violet-500 hover:underline lowercase font-normal"
+            >
+              {showUrlInput ? 'Ocultar URL' : 'Configurar URL'}
+            </button>
+          </label>
           <div className="relative">
             <Users size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
@@ -116,6 +124,23 @@ export default function OccupancyForm({ onSuccess }: OccupancyFormProps) {
             />
           </div>
         </div>
+
+        {showUrlInput && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="space-y-1"
+          >
+            <label className="block text-[9px] font-bold text-slate-400 uppercase ml-1">URL del Script (Google Apps Script)</label>
+            <input 
+              type="text" 
+              placeholder="https://script.google.com/macros/s/..."
+              value={customUrl}
+              onChange={(e) => setCustomUrl(e.target.value)}
+              className="w-full px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-[11px] focus:ring-1 focus:ring-violet-500 outline-none"
+            />
+          </motion.div>
+        )}
 
         <motion.button
           whileTap={{ scale: 0.98 }}
