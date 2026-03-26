@@ -19,7 +19,11 @@ import {
   Camera,
   AlertCircle,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  X,
+  ArrowUpDown,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 import { 
   XAxis, 
@@ -54,7 +58,7 @@ import {
 } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
-import { fetchData, DailyStats } from './services/dataService';
+import { fetchData, DailyStats, ServiceDetail } from './services/dataService';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import OccupancyForm from './components/OccupancyForm';
@@ -89,6 +93,7 @@ export default function App() {
   const [selectedType, setSelectedType] = useState<string>('TODOS');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
+  const [selectedService, setSelectedService] = useState<DailyStats | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -879,13 +884,17 @@ export default function App() {
                       {filteredYesterdayData.length > 0 ? (() => {
                         const totalDayOccupancy = Math.max(...yesterdayData.map(d => d.ocupacion || 0), 0);
                         return filteredYesterdayData.map((row, idx) => (
-                          <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                          <tr 
+                            key={idx} 
+                            onClick={() => setSelectedService(row)}
+                            className="hover:bg-slate-50/50 transition-colors cursor-pointer group"
+                          >
                             <td className="px-6 py-4">
                               <div className="flex items-center gap-2">
                                 {row.tipo === 'ALMUERZO' ? <Coffee size={16} className="text-amber-500" /> : 
                                  row.tipo === 'CENA' ? <Moon size={16} className="text-indigo-500" /> : 
                                  <Utensils size={16} className="text-slate-400" />}
-                                <span className="font-bold text-slate-700 text-sm">{row.tipo}</span>
+                                <span className="font-bold text-slate-700 text-sm group-hover:text-blue-600 transition-colors">{row.tipo}</span>
                               </div>
                             </td>
                             <td className="px-6 py-4 text-sm text-slate-600 font-medium">{row.cantidad}</td>
@@ -935,7 +944,13 @@ export default function App() {
                   {filteredYesterdayData.length > 0 ? (() => {
                     const totalDayOccupancy = Math.max(...yesterdayData.map(d => d.ocupacion || 0), 0);
                     return filteredYesterdayData.map((row, idx) => (
-                      <div key={idx} className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                      <motion.div 
+                        key={idx} 
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        onClick={() => setSelectedService(row)}
+                        className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden cursor-pointer hover:border-blue-300 transition-all"
+                      >
                         <div className="p-4 border-b border-slate-100 bg-white flex justify-between items-center">
                           <div className="flex items-center gap-2">
                             {row.tipo === 'ALMUERZO' ? <Coffee size={18} className="text-amber-500" /> : 
@@ -998,7 +1013,7 @@ export default function App() {
                             </div>
                           </div>
                         </div>
-                      </div>
+                      </motion.div>
                     ));
                   })() : (
                     <div className="py-12 text-center text-slate-400 font-medium bg-white rounded-xl border border-dashed border-slate-200">
@@ -1017,7 +1032,7 @@ export default function App() {
               exit={{ opacity: 0, x: -20 }}
               transition={{ duration: 0.2 }}
             >
-              <CalendarView data={filteredData} />
+              <CalendarView data={filteredData} onSelectService={setSelectedService} />
             </motion.div>
           ) : (
             <motion.div
@@ -1030,13 +1045,289 @@ export default function App() {
               <BillingView data={filteredData} />
             </motion.div>
           )}
-      </AnimatePresence>
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {selectedService && (
+            <ServiceDetailModal 
+              service={selectedService} 
+              onClose={() => setSelectedService(null)} 
+            />
+          )}
+        </AnimatePresence>
       </main>
     </div>
   );
 }
 
-function CalendarView({ data }: { data: DailyStats[] }) {
+interface ServiceDetailModalProps {
+  service: DailyStats;
+  onClose: () => void;
+}
+
+function ServiceDetailModal({ service, onClose }: ServiceDetailModalProps) {
+  const [sortConfig, setSortConfig] = useState<{ key: keyof ServiceDetail; direction: 'asc' | 'desc' } | null>(null);
+
+  const sortedDetails = useMemo(() => {
+    const items = [...service.details];
+    if (sortConfig !== null) {
+      items.sort((a, b) => {
+        const aValue = a[sortConfig.key];
+        const bValue = b[sortConfig.key];
+        
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+          return sortConfig.direction === 'asc' 
+            ? aValue.localeCompare(bValue) 
+            : bValue.localeCompare(aValue);
+        }
+        
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return sortConfig.direction === 'asc' 
+            ? aValue - bValue 
+            : bValue - aValue;
+        }
+        
+        return 0;
+      });
+    }
+    return items;
+  }, [service.details, sortConfig]);
+
+  const requestSort = (key: keyof ServiceDetail) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const SortIcon = ({ columnKey }: { columnKey: keyof ServiceDetail }) => {
+    if (!sortConfig || sortConfig.key !== columnKey) {
+      return <ArrowUpDown size={12} className="text-slate-300" />;
+    }
+    return sortConfig.direction === 'asc' 
+      ? <ChevronUp size={12} className="text-indigo-500" /> 
+      : <ChevronDown size={12} className="text-indigo-500" />;
+  };
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md"
+      onClick={onClose}
+    >
+      <motion.div 
+        initial={{ scale: 0.95, y: 10 }}
+        animate={{ scale: 1, y: 0 }}
+        exit={{ scale: 0.95, y: 10 }}
+        className="bg-white rounded-[2rem] w-full max-w-5xl max-h-[90vh] overflow-hidden flex flex-col shadow-[0_32px_64px_-16px_rgba(0,0,0,0.3)] border border-slate-200"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-8 py-6 border-b border-slate-100 flex items-center justify-between bg-white">
+          <div className="flex items-center gap-5">
+            <div className={cn(
+              "w-14 h-14 rounded-2xl flex items-center justify-center text-white",
+              service.tipo === 'ALMUERZO' ? "bg-slate-900" : 
+              service.tipo === 'CENA' ? "bg-indigo-950" : 
+              "bg-slate-800"
+            )}>
+              {service.tipo === 'ALMUERZO' ? <Coffee size={28} /> : 
+               service.tipo === 'CENA' ? <Moon size={28} /> : 
+               <Utensils size={28} />}
+            </div>
+            <div>
+              <div className="flex items-center gap-3 mb-1">
+                <h3 className="text-2xl font-bold text-slate-900 tracking-tight">
+                  {service.tipo}
+                </h3>
+                <span className="px-3 py-1 bg-slate-100 text-slate-600 text-[10px] font-bold rounded-full uppercase tracking-wider">
+                  {service.fecha}
+                </span>
+              </div>
+              <p className="text-slate-400 text-sm font-medium flex items-center gap-2">
+                <Users size={14} />
+                {service.cantidad} Cubiertos totales registrados
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={onClose}
+            className="w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-full transition-all text-slate-400 hover:text-slate-900"
+          >
+            <X size={24} />
+          </button>
+        </div>
+
+        {/* Stats Summary */}
+        <div className="px-8 py-6 bg-slate-50/50 border-b border-slate-100">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ventas Totales</p>
+              <p className="text-2xl font-bold text-slate-900">${service.total.toLocaleString()}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Ticket Promedio</p>
+              <p className="text-2xl font-bold text-slate-900">${Math.round(service.ticketPromedio).toLocaleString()}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Efectivo</p>
+              <p className="text-2xl font-bold text-emerald-600">${service.efectivo.toLocaleString()}</p>
+            </div>
+            <div className="space-y-1">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Otros Medios</p>
+              <p className="text-2xl font-bold text-indigo-600">${(service.tarjeta + service.qr + service.cargoHabitacion).toLocaleString()}</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Table Content */}
+        <div className="flex-1 overflow-y-auto px-8 py-6">
+          <div className="mb-6 flex items-center justify-between">
+            <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <div className="w-1.5 h-4 bg-indigo-600 rounded-full" />
+              Desglose de Operaciones
+            </h4>
+            <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+              {sortedDetails.length} Registros encontrados
+            </div>
+          </div>
+          
+          <div className="border border-slate-100 rounded-2xl overflow-hidden shadow-sm">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50/80 border-b border-slate-100">
+                  <th 
+                    className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm pl-6 pr-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors"
+                    onClick={() => requestSort('hora')}
+                  >
+                    <div className="flex items-center gap-2">
+                      Hora
+                      <SortIcon columnKey="hora" />
+                    </div>
+                  </th>
+                  <th 
+                    className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm px-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest cursor-pointer hover:bg-slate-100 transition-colors"
+                    onClick={() => requestSort('comentario')}
+                  >
+                    <div className="flex items-center gap-2">
+                      Detalle / Comentario
+                      <SortIcon columnKey="comentario" />
+                    </div>
+                  </th>
+                  <th 
+                    className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm px-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center cursor-pointer hover:bg-slate-100 transition-colors"
+                    onClick={() => requestSort('pax')}
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      PAX
+                      <SortIcon columnKey="pax" />
+                    </div>
+                  </th>
+                  <th 
+                    className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm px-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center cursor-pointer hover:bg-slate-100 transition-colors"
+                    onClick={() => requestSort('mesa')}
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      Mesa
+                      <SortIcon columnKey="mesa" />
+                    </div>
+                  </th>
+                  <th 
+                    className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm px-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center cursor-pointer hover:bg-slate-100 transition-colors"
+                    onClick={() => requestSort('habitacion')}
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      Hab.
+                      <SortIcon columnKey="habitacion" />
+                    </div>
+                  </th>
+                  <th 
+                    className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm px-4 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center cursor-pointer hover:bg-slate-100 transition-colors"
+                    onClick={() => requestSort('pago')}
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      Pago
+                      <SortIcon columnKey="pago" />
+                    </div>
+                  </th>
+                  <th 
+                    className="sticky top-0 z-10 bg-slate-50/95 backdrop-blur-sm pl-4 pr-6 py-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-right cursor-pointer hover:bg-slate-100 transition-colors"
+                    onClick={() => requestSort('total')}
+                  >
+                    <div className="flex items-center justify-end gap-2">
+                      Total
+                      <SortIcon columnKey="total" />
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {sortedDetails.map((row, idx) => (
+                  <tr key={idx} className="hover:bg-slate-50/30 transition-colors group">
+                    <td className="pl-6 pr-4 py-4">
+                      <div className="flex items-center gap-2">
+                        <Clock size={12} className="text-slate-300" />
+                        <span className="text-xs font-bold text-slate-600 tracking-tight">{row.hora}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <p className="text-sm font-semibold text-slate-800 leading-tight mb-0.5">
+                        {row.comentario || `Consumo #${idx + 1}`}
+                      </p>
+                      <p className="text-[10px] text-slate-400 font-medium tracking-wide">REF: {row.referencia}</p>
+                    </td>
+                    <td className="px-4 py-4 text-center">
+                      <span className="inline-flex items-center justify-center w-8 h-8 bg-slate-50 border border-slate-100 rounded-lg text-xs font-bold text-slate-700">
+                        {row.pax}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 text-center">
+                      <span className="text-xs font-bold text-slate-600">{row.mesa}</span>
+                    </td>
+                    <td className="px-4 py-4 text-center">
+                      <span className="text-xs font-bold text-slate-600">{row.habitacion}</span>
+                    </td>
+                    <td className="px-4 py-4 text-center">
+                      <span className={cn(
+                        "text-[9px] font-bold px-2 py-0.5 rounded-md border",
+                        row.pago.includes('EFECTIVO') ? "bg-emerald-50 text-emerald-700 border-emerald-100" :
+                        row.pago.includes('TARJETA') ? "bg-indigo-50 text-indigo-700 border-indigo-100" :
+                        "bg-slate-50 text-slate-600 border-slate-100"
+                      )}>
+                        {row.pago}
+                      </span>
+                    </td>
+                    <td className="pl-4 pr-6 py-4 text-right">
+                      <p className="text-sm font-bold text-slate-900 tracking-tight">${row.total.toLocaleString()}</p>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        
+        {/* Footer */}
+        <div className="px-8 py-5 bg-white border-t border-slate-100 flex justify-between items-center">
+          <p className="text-[10px] text-slate-400 font-medium italic">
+            * Los datos mostrados corresponden a los registros individuales de la hoja de cálculo.
+          </p>
+          <button 
+            onClick={onClose}
+            className="px-8 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-slate-200 active:scale-95"
+          >
+            Cerrar Ventana
+          </button>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+function CalendarView({ data, onSelectService }: { data: DailyStats[], onSelectService: (service: DailyStats) => void }) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
 
@@ -1241,7 +1532,13 @@ function CalendarView({ data }: { data: DailyStats[] }) {
                   if (!item) return null;
 
                   return (
-                    <div key={tipo} className="bg-slate-50 rounded-xl p-5 border border-slate-100 hover:border-blue-200 transition-colors">
+                    <motion.div 
+                      key={tipo} 
+                      whileHover={{ scale: 1.02, borderColor: '#3b82f6' }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => onSelectService(item)}
+                      className="bg-slate-50 rounded-xl p-5 border border-slate-100 cursor-pointer transition-all shadow-sm hover:shadow-md"
+                    >
                       <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-3">
                           <div className={cn(
@@ -1293,7 +1590,7 @@ function CalendarView({ data }: { data: DailyStats[] }) {
                           </div>
                         </div>
                       </div>
-                    </div>
+                    </motion.div>
                   );
                 })}
               </div>

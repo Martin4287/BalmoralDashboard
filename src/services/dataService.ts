@@ -14,6 +14,17 @@ export interface RawReservation {
   [key: string]: any;
 }
 
+export interface ServiceDetail {
+  pax: number;
+  total: number;
+  pago: string;
+  comentario: string;
+  referencia: string;
+  mesa: string;
+  habitacion: string;
+  hora: string;
+}
+
 export interface DailyStats {
   fecha: string;
   tipo: string;
@@ -25,6 +36,7 @@ export interface DailyStats {
   total: number;
   ticketPromedio: number;
   ocupacion: number;
+  details: ServiceDetail[];
 }
 
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1ejsrirpAwCVsftNfF9GQuQRu8q-TEA_kzLxoCts83Zo/export?format=csv';
@@ -125,7 +137,7 @@ export const fetchData = async (): Promise<DailyStats[]> => {
             const tarjeta = parseNum(getVal(['tarjeta', 'card', 'débito', 'credito', 'crédito', 'visa', 'master']));
             const qr = parseNum(getVal(['qr', 'pix', 'transferencia', 'pago_móvil', 'mercado_pago', 'mp']));
             const cargoHabitacion = parseNum(getVal(['cargo_habitacion', 'room_charge', 'cargo_hab', 'habitación', 'habitacion', 'cargo_de_habitacion']));
-            const total = parseNum(getVal(['total', 'monto', 'importe', 'subtotal', 'neto']));
+            const total = parseNum(getVal(['monto', 'total', 'importe', 'subtotal', 'neto']));
 
             const paymentMethodRaw = String(getVal(['pago', 'medio_de_pago', 'forma_de_pago', 'payment_method']) || '').toUpperCase().trim();
 
@@ -163,7 +175,8 @@ export const fetchData = async (): Promise<DailyStats[]> => {
                 cargoHabitacion: 0,
                 total: 0,
                 ticketPromedio: 0,
-                ocupacion: 0
+                ocupacion: 0,
+                details: []
               };
             }
 
@@ -173,6 +186,19 @@ export const fetchData = async (): Promise<DailyStats[]> => {
             grouped[key].qr += finalQr;
             grouped[key].cargoHabitacion += finalCargoHabitacion;
             grouped[key].total += finalTotal;
+            
+            // Create a normalized detail object
+            const detail: ServiceDetail = {
+              pax: cantidad,
+              total: finalTotal,
+              pago: paymentMethodRaw || 'S/D',
+              comentario: String(getVal(['comentario', 'detalle', 'cliente', 'nota', 'comentarios']) || ''),
+              referencia: String(getVal(['referencia', 'ref', 'id', 'nro', 'reserva']) || 'N/A'),
+              mesa: String(getVal(['mesa', 'table', 'nro_mesa', 'numero_mesa']) || 'N/A'),
+              habitacion: String(getVal(['habitacion', 'habitación', 'room', 'nro_habitacion', 'nro_hab']) || 'N/A'),
+              hora: String(getVal(['hora', 'time', 'h', 'horario']) || '--:--')
+            };
+            grouped[key].details.push(detail);
             // For occupancy, we take the max value if multiple rows for the same date/type have it
             if (ocupacion > grouped[key].ocupacion) {
               grouped[key].ocupacion = ocupacion;
