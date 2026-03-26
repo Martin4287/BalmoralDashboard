@@ -24,7 +24,8 @@ export default function OccupancyForm({ onSuccess }: OccupancyFormProps) {
 
     setStatus('loading');
     
-    const scriptUrl = (import.meta as any).env.VITE_GOOGLE_SCRIPT_URL;
+    // Check both import.meta.env and process.env (for AI Studio environment)
+    const scriptUrl = (import.meta as any).env?.VITE_GOOGLE_SCRIPT_URL || (process as any).env?.VITE_GOOGLE_SCRIPT_URL;
 
     if (!scriptUrl || !scriptUrl.startsWith('https://script.google.com')) {
       // Simulación si no hay URL configurada o es incorrecta
