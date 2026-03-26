@@ -1337,13 +1337,16 @@ function CalendarView({ data, onSelectService }: { data: DailyStats[], onSelectS
     return eachDayOfInterval({ start, end });
   }, [currentMonth]);
 
-  const statsByDay = useMemo<Record<string, { total: number; pax: number; items: DailyStats[] }>>(() => {
-    const grouped: Record<string, { total: number; pax: number; items: DailyStats[] }> = {};
+  const statsByDay = useMemo<Record<string, { total: number; pax: number; ocupacion: number; items: DailyStats[] }>>(() => {
+    const grouped: Record<string, { total: number; pax: number; ocupacion: number; items: DailyStats[] }> = {};
     data.forEach(item => {
-      if (!grouped[item.fecha]) grouped[item.fecha] = { total: 0, pax: 0, items: [] };
+      if (!grouped[item.fecha]) grouped[item.fecha] = { total: 0, pax: 0, ocupacion: 0, items: [] };
       grouped[item.fecha].total += item.total;
       grouped[item.fecha].pax += item.cantidad;
       grouped[item.fecha].items.push(item);
+      if (item.ocupacion > grouped[item.fecha].ocupacion) {
+        grouped[item.fecha].ocupacion = item.ocupacion;
+      }
     });
     return grouped;
   }, [data]);
@@ -1458,11 +1461,17 @@ function CalendarView({ data, onSelectService }: { data: DailyStats[], onSelectS
                   <div className="space-y-2">
                     {/* Workload Indicator (PAX) */}
                     <div className="space-y-1">
-                      <div className="flex items-center justify-between text-[9px] font-bold text-blue-700">
-                        <div className="flex items-center gap-1">
+                      <div className="flex items-center justify-between text-[9px] font-bold">
+                        <div className="flex items-center gap-1 text-blue-700">
                           <Users size={10} />
                           <span>{dayStats.pax}</span>
                         </div>
+                        {dayStats.ocupacion > 0 && (
+                          <div className="flex items-center gap-1 text-violet-600">
+                            <span className="opacity-60">H:</span>
+                            <span>{dayStats.ocupacion}</span>
+                          </div>
+                        )}
                       </div>
                       <div className="h-1 w-full bg-blue-100 rounded-full overflow-hidden">
                         <div 
@@ -1514,6 +1523,12 @@ function CalendarView({ data, onSelectService }: { data: DailyStats[], onSelectS
                 <p className="text-slate-500 text-sm font-medium">Resumen de servicios y facturación</p>
               </div>
               <div className="flex items-center gap-6">
+                {selectedDayData.ocupacion > 0 && (
+                  <div className="text-right">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Pax Hotel</p>
+                    <p className="text-xl font-black text-violet-600">{selectedDayData.ocupacion}</p>
+                  </div>
+                )}
                 <div className="text-right">
                   <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Total PAX</p>
                   <p className="text-xl font-black text-blue-600">{selectedDayData.pax}</p>

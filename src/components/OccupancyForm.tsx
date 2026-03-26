@@ -83,6 +83,9 @@ export default function OccupancyForm({ onSuccess }: OccupancyFormProps) {
       </h4>
 
       <form onSubmit={handleSubmit} className="space-y-3">
+        <p className="text-[9px] text-slate-400 italic mb-2">
+          * Los datos pueden tardar unos minutos en reflejarse en el dashboard debido a la sincronización de Google Sheets.
+        </p>
         <div>
           <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1 ml-1">Fecha</label>
           <div className="relative">

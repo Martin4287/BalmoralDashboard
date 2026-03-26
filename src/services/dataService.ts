@@ -43,7 +43,7 @@ const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1ejsrirpAwCVsftNfF9GQu
 
 export const fetchData = async (): Promise<DailyStats[]> => {
   try {
-    const response = await fetch(SHEET_URL);
+    const response = await fetch(`${SHEET_URL}&t=${Date.now()}`);
     if (!response.ok) throw new Error('Failed to fetch Google Sheet');
     const csvText = await response.text();
     
