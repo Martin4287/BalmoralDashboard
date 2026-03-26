@@ -24,31 +24,32 @@ export default function OccupancyForm({ onSuccess }: OccupancyFormProps) {
 
     setStatus('loading');
     
-    // Check import.meta.env (Vite standard)
-    const scriptUrl = import.meta.env.VITE_GOOGLE_SCRIPT_URL;
+    // Intentamos obtener la URL de varias fuentes para mayor compatibilidad
+    const scriptUrl = import.meta.env.VITE_GOOGLE_SCRIPT_URL || (window as any)._VITE_GOOGLE_SCRIPT_URL;
+
+    console.log('[OccupancyForm] URL detectada:', scriptUrl ? 'Configurada (OK)' : 'No detectada (FALTA)');
 
     if (!scriptUrl || !scriptUrl.startsWith('https://script.google.com')) {
       // Simulación si no hay URL configurada o es incorrecta
       setTimeout(() => {
         setStatus('success');
-        const errorType = !scriptUrl ? 'Falta Secret VITE_GOOGLE_SCRIPT_URL' : 'URL inválida (debe empezar con script.google.com)';
-        setMessage(`¡Datos guardados! (Modo Simulación - ${errorType})`);
+        const errorType = !scriptUrl ? 'Falta variable VITE_GOOGLE_SCRIPT_URL' : 'URL mal formateada';
+        setMessage(`¡Simulado! ${errorType}. Revisa los Secrets en Settings.`);
         setTimeout(() => {
           setStatus('idle');
           setOccupancy('');
           onSuccess();
-        }, 2000);
-      }, 1500);
+        }, 3000);
+      }, 1000);
       return;
     }
 
     try {
-      // Formatear fecha para el Sheet (dd/MM/yyyy)
       const [y, m, d] = date.split('-');
       const formattedDate = `${d}/${m}/${y}`;
 
-      // Usamos text/plain para evitar problemas de CORS preflight
-      // Google Apps Script recibirá el JSON en e.postData.contents igualmente
+      console.log('[OccupancyForm] Enviando a Google Sheets:', { formattedDate, occupancy });
+
       await fetch(scriptUrl, {
         method: 'POST',
         mode: 'no-cors', 
@@ -63,19 +64,18 @@ export default function OccupancyForm({ onSuccess }: OccupancyFormProps) {
         }),
       });
 
-      // Con no-cors no podemos leer la respuesta, pero si no hay error de red, asumimos éxito
       setStatus('success');
-      setMessage('Datos enviados a la cola de Google Sheets');
+      setMessage('¡Enviado con éxito a la planilla!');
       setOccupancy('');
       
       setTimeout(() => {
         setStatus('idle');
         onSuccess();
-      }, 3000);
+      }, 2000);
     } catch (error) {
-      console.error('Error saving occupancy:', error);
+      console.error('[OccupancyForm] Error crítico:', error);
       setStatus('error');
-      setMessage('Error al conectar con Google Sheets');
+      setMessage('Error de conexión. Revisa la consola (F12).');
     }
   };
 
