@@ -30,7 +30,8 @@ export default function OccupancyForm({ onSuccess }: OccupancyFormProps) {
       // Simulación si no hay URL configurada o es incorrecta
       setTimeout(() => {
         setStatus('success');
-        setMessage(scriptUrl ? '¡Datos guardados! (Modo Simulación - URL inválida)' : '¡Datos guardados! (Modo Simulación - Falta Secret)');
+        const errorType = !scriptUrl ? 'Falta Secret VITE_GOOGLE_SCRIPT_URL' : 'URL inválida (debe empezar con script.google.com)';
+        setMessage(`¡Datos guardados! (Modo Simulación - ${errorType})`);
         setTimeout(() => {
           setStatus('idle');
           setOccupancy('');
