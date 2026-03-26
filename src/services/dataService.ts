@@ -58,10 +58,20 @@ export const fetchData = async (): Promise<DailyStats[]> => {
         complete: (results) => {
           const rawData = results.data as any[];
           
-          // Debug: Log headers to see what we're actually getting
+          // Debug: Log headers and first row to see what we're actually getting
           if (rawData.length > 0) {
-            console.log('Normalized headers found:', Object.keys(rawData[0]));
+            console.log('[DataService] Normalized headers found:', Object.keys(rawData[0]));
+            console.log('[DataService] First row sample:', rawData[0]);
           }
+
+          // Helper to normalize strings for matching (removes accents)
+          const normalizeForMatch = (s: string) => 
+            String(s || '')
+              .toLowerCase()
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .trim()
+              .replace(/[\s.]+/g, '_');
 
           // Filter by arrived (case insensitive)
           const arrivedData = rawData.filter(row => {
@@ -71,23 +81,32 @@ export const fetchData = async (): Promise<DailyStats[]> => {
             return arrived === 'TRUE' || arrived === 'VERDADERO' || arrived === 'SÍ' || arrived === 'SI' || arrived === '1' || arrived === 'CHECKED' || arrived === 'OK';
           });
 
+          console.log(`[DataService] Filas tras filtro 'arrived': ${arrivedData.length}`);
+
           // Group by date and type
           const grouped: Record<string, DailyStats> = {};
+          let occupancyFoundCount = 0;
 
           arrivedData.forEach(row => {
             // Fuzzy header matching helper
+            const rowKeys = Object.keys(row);
+            const normalizedRowKeys = rowKeys.map(k => ({ original: k, normalized: normalizeForMatch(k) }));
+
             const getVal = (aliases: string[]) => {
-              for (const alias of aliases) {
-                const normalizedAlias = alias.toLowerCase().trim().replace(/[\s.]+/g, '_');
-                if (row[normalizedAlias] !== undefined) return row[normalizedAlias];
+              const normalizedAliases = aliases.map(a => normalizeForMatch(a));
+              
+              // 1. Try exact normalized match
+              for (const nAlias of normalizedAliases) {
+                const foundKey = normalizedRowKeys.find(rk => rk.normalized === nAlias);
+                if (foundKey && row[foundKey.original] !== undefined) return row[foundKey.original];
               }
-              // Try even looser match
-              const rowKeys = Object.keys(row);
-              for (const alias of aliases) {
-                const normalizedAlias = alias.toLowerCase().trim().replace(/[\s.]+/g, '_');
-                const found = rowKeys.find(rk => rk.includes(normalizedAlias) || normalizedAlias.includes(rk));
-                if (found) return row[found];
+
+              // 2. Try partial match
+              for (const nAlias of normalizedAliases) {
+                const foundKey = normalizedRowKeys.find(rk => rk.normalized.includes(nAlias) || nAlias.includes(rk.normalized));
+                if (foundKey && row[foundKey.original] !== undefined) return row[foundKey.original];
               }
+              
               return undefined;
             };
 
@@ -111,6 +130,7 @@ export const fetchData = async (): Promise<DailyStats[]> => {
             if (type.includes('ALMUERZO') || type.includes('LUNCH') || type.includes('MEDIODIA')) type = 'ALMUERZO';
             else if (type.includes('CENA') || type.includes('DINNER') || type.includes('NOCHE')) type = 'CENA';
             else if (type.includes('OTRO')) type = 'OTROS';
+            else if (type.includes('OCUPACION') || type.includes('OCUPACIÓN')) type = 'OCUPACION';
             
             const key = `${normalizedDate}_${type}`;
 
@@ -122,10 +142,6 @@ export const fetchData = async (): Promise<DailyStats[]> => {
               if (clean.includes('.') && clean.includes(',')) {
                 clean = clean.replace(/\./g, '').replace(',', '.');
               } else if (clean.includes(',')) {
-                // If it has a comma and it's like 1.234 or 1,234
-                // In many locales , is decimal. But if it's 1.000,00 we handled it.
-                // If it's just 1,000 it might be 1000 or 1.0. 
-                // We'll assume it's a decimal separator if it's the only separator.
                 clean = clean.replace(',', '.');
               }
               
@@ -163,6 +179,13 @@ export const fetchData = async (): Promise<DailyStats[]> => {
             const finalTotal = total || calculatedTotal;
             const cantidad = parseInt(String(getVal(['cantidad', 'pax', 'qty', 'personas', 'comensales']) || 0)) || 0;
             const ocupacion = parseNum(getVal(['ocupacion', 'ocupación', 'hotel_pax', 'pax_hotel', 'pax_h', 'h_pax', 'ocupacion_hotel']));
+
+            if (ocupacion > 0) {
+              occupancyFoundCount++;
+              if (occupancyFoundCount < 10) {
+                console.log(`[DataService] Found occupancy row: Date=${normalizedDate}, Type=${type}, Value=${ocupacion}`);
+              }
+            }
 
             if (!grouped[key]) {
               grouped[key] = {
@@ -204,6 +227,8 @@ export const fetchData = async (): Promise<DailyStats[]> => {
               grouped[key].ocupacion = ocupacion;
             }
           });
+
+          console.log(`[DataService] Registros de ocupación encontrados: ${occupancyFoundCount}`);
 
           // Calculate averages
           const finalData = Object.values(grouped).map(stat => ({

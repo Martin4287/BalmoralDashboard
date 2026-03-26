@@ -47,23 +47,25 @@ export default function OccupancyForm({ onSuccess }: OccupancyFormProps) {
       const [y, m, d] = date.split('-');
       const formattedDate = `${d}/${m}/${y}`;
 
-      const response = await fetch(scriptUrl, {
+      // Usamos text/plain para evitar problemas de CORS preflight
+      // Google Apps Script recibirá el JSON en e.postData.contents igualmente
+      await fetch(scriptUrl, {
         method: 'POST',
-        mode: 'no-cors', // Necesario para Google Apps Script
+        mode: 'no-cors', 
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'text/plain',
         },
         body: JSON.stringify({
           fecha: formattedDate,
           ocupacion: Number(occupancy),
-          tipo: 'OCUPACION', // Identificador más simple
+          tipo: 'OCUPACION',
           timestamp: new Date().toISOString()
         }),
       });
 
-      // Con no-cors no podemos ver el body, pero si llegamos aquí es que se envió
+      // Con no-cors no podemos leer la respuesta, pero si no hay error de red, asumimos éxito
       setStatus('success');
-      setMessage('Ocupación enviada correctamente');
+      setMessage('Datos enviados a la cola de Google Sheets');
       setOccupancy('');
       
       setTimeout(() => {
